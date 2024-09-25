@@ -1,0 +1,19 @@
+{
+  "name": "alfred-notion-task",
+  "version": "1.0.0",
+  "description": "Alfred workflow to manage a task in Notion",
+  "author": {
+    "name": "Yumiko Kokubu",
+    "email": "ymymyummy@gmail.com",
+    "url": "https://ymkokh.com"
+  },
+  "type": "module",
+  "scripts": {
+    "postinstall": "alfy-init",
+    "preuninstall": "alfy-cleanup"
+  },
+  "dependencies": {
+    "@notionhq/client": "^2.2.15",
+    "alfy": "^2.1.0"
+  }
+}
