@@ -46,9 +46,6 @@ const getJapanTime = () => {
       Date: {
         date: { start: date },
       },
-      Status: {
-        status: { name: "Todo" },
-      },
     };
   }
 
