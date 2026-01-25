@@ -151,6 +151,24 @@ const formatDate = (startStr, endStr) => {
     ],
   };
 
+  // プロジェクト一覧を取得
+  const projectsUrl = `https://api.notion.com/v1/databases/${process.env.RELATION_DATABASE_ID}/query`;
+  const projects = await alfy.fetch(projectsUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({}),
+    maxAge: 60 * 1000 * 10,
+    transform: (response) => {
+      const { results } = response;
+      if (!results) return {};
+      const map = {};
+      results.forEach((p) => {
+        map[p.id] = p.properties["Project Name"]?.title?.[0]?.text?.content || "";
+      });
+      return map;
+    },
+  });
+
   const tasks = await alfy
     .fetch(url, {
       method: "POST",
@@ -159,25 +177,43 @@ const formatDate = (startStr, endStr) => {
       maxAge: 60 * 1000 * 1,
       transform: (response) => {
         const { results } = response;
-        return results.map((element) => ({
-          title: element.properties["Task"].title[0].text.content,
-          id: element.id,
-          url: element.url,
-          dateStart: element.properties["Date"].date?.start || null,
-          dateEnd: element.properties["Date"].date?.end || null,
-          status: element.properties["Status"].status.name,
-          estimate: element.properties["Estimate Hours"].number || 0,
-          actual: element.properties["Actual Hours"].number || 0,
-        }));
+        return results.map((element) => {
+          const projectRelation = element.properties["Project"]?.relation?.[0];
+          const projectId = projectRelation?.id || null;
+          return {
+            title: element.properties["Task"].title[0].text.content,
+            id: element.id,
+            url: element.url,
+            dateStart: element.properties["Date"].date?.start || null,
+            dateEnd: element.properties["Date"].date?.end || null,
+            status: element.properties["Status"].status.name,
+            estimate: element.properties["Estimate Hours"].number || 0,
+            actual: element.properties["Actual Hours"].number || 0,
+            projectId,
+          };
+        });
       },
     })
     .then((res) => {
       return [
         ...res.map((task) => {
+          const projectName = task.projectId ? projects[task.projectId] : null;
+          const taskData = JSON.stringify({
+            title: task.title,
+            projectName: projectName || "",
+            url: task.url,
+          });
+          const projectLabel = projectName ? `[${projectName}] ` : "";
           return {
             title: `${status(task.status)} ${task.title}`,
-            subtitle: `Date: ${formatDate(task.dateStart, task.dateEnd)} / Estimate: ${task.estimate ? task.estimate + "h" : "-"} / Actual: ${task.actual ? task.actual + "h" : "-"}`,
-            arg: task.url,
+            subtitle: `${projectLabel} Date: ${formatDate(task.dateStart, task.dateEnd)} / Estimate: ${task.estimate ? task.estimate + "h" : "-"} / Actual: ${task.actual ? task.actual + "h" : "-"}`,
+            arg: taskData,
+            mods: {
+              cmd: {
+                arg: task.url,
+                subtitle: "Open in Notion",
+              },
+            },
           };
         }),
         {
