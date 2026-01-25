@@ -6,21 +6,32 @@ When adding a new task, you can specify the current date or a relation that is l
 
 ![preview](./docs/Sep-25-2024%2016-39-08.gif)
   
-## Usage  
+## Usage
+
+### List tasks
+
+```text
+nt
+```
+
+Show tasks with status "To-do" or "In progress" that are scheduled for today or before.
+Select a task to open it in Notion.
+
+### Add a new task
 
 ```text
 nt [task] <t|today>
-```  
+```
 
-**Press Enter** : Add a task with the current date(optionally).  
+**Press Enter** : Add a task with the current date(optionally).
 **⌘ + Enter** : Add a task with a project relation.
 
-You can incrementally search for a project name.  
+You can incrementally search for a project name.
 
-```text  
-[task] <t|today> <project>  
-```  
-  
+```text
+[task] <t|today> <project>
+```
+
 If you want to cancel adding a relation, press **⌘ + Enter** again.  
 
 ## Installation  
