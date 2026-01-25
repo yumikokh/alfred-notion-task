@@ -18,14 +18,20 @@ export const getJapanTime = () => {
   return `${year}-${month}-${day}`;
 };
 
+const STATUS = {
+  "Todo": "Ready",
+  "InProgress": "In Progress",
+  Done: "Done",
+};
+
 const status = (status) => {
   switch (status) {
-    case "Todo":
-      return "⏳";
-    case "In progress":
-      return "🚀";
-    case "Done":
-      return "✅";
+    case STATUS.Todo:
+      return "🟡";
+    case STATUS.InProgress:
+      return "🔵";
+    case STATUS.Done:
+      return "🟢";
     default:
       return "-";
   }
@@ -76,7 +82,7 @@ const status = (status) => {
             {
               property: "Status",
               status: {
-                equals: "Todo",
+                equals: STATUS.Todo,
               },
             },
             {
@@ -92,7 +98,7 @@ const status = (status) => {
             {
               property: "Status",
               status: {
-                equals: "In progress",
+                equals: STATUS.InProgress,
               },
             },
             {
@@ -131,7 +137,7 @@ const status = (status) => {
           title: element.properties["Task"].title[0].text.content,
           id: element.id,
           url: element.url,
-          date: element.properties["Date"].date.start || "-",
+          date: element.properties["Date"].date?.start || "-",
           status: element.properties["Status"].status.name,
           estimate: element.properties["Estimate Hours"].number || 0,
           actual: element.properties["Actual Hours"].number || 0,
