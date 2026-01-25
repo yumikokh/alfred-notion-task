@@ -37,6 +37,32 @@ const status = (status) => {
   }
 };
 
+const formatTime = (date) => {
+  const hours = date.getHours();
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+};
+
+const formatDate = (startStr, endStr) => {
+  if (!startStr) return "-";
+  const start = new Date(startStr);
+  const today = new Date();
+  const isToday =
+    start.getFullYear() === today.getFullYear() &&
+    start.getMonth() === today.getMonth() &&
+    start.getDate() === today.getDate();
+
+  const month = start.getMonth() + 1;
+  const day = start.getDate();
+  const datePrefix = isToday ? "" : `${month}/${day} `;
+
+  if (endStr) {
+    const end = new Date(endStr);
+    return `${datePrefix}${formatTime(start)}-${formatTime(end)}`;
+  }
+  return `${datePrefix}${formatTime(start)}`;
+};
+
 (async () => {
   if (
     !process.env.TASK_DATABASE_ID ||
@@ -137,7 +163,8 @@ const status = (status) => {
           title: element.properties["Task"].title[0].text.content,
           id: element.id,
           url: element.url,
-          date: element.properties["Date"].date?.start || "-",
+          dateStart: element.properties["Date"].date?.start || null,
+          dateEnd: element.properties["Date"].date?.end || null,
           status: element.properties["Status"].status.name,
           estimate: element.properties["Estimate Hours"].number || 0,
           actual: element.properties["Actual Hours"].number || 0,
@@ -149,9 +176,7 @@ const status = (status) => {
         ...res.map((task) => {
           return {
             title: `${status(task.status)} ${task.title}`,
-            subtitle: `Date: ${task.date} / Estimate: ${
-              task.estimate ?? "-"
-            } / Actual: ${task.actual ?? "-"}`,
+            subtitle: `Date: ${formatDate(task.dateStart, task.dateEnd)} / Estimate: ${task.estimate ? task.estimate + "h" : "-"} / Actual: ${task.actual ? task.actual + "h" : "-"}`,
             arg: task.url,
           };
         }),
