@@ -1,9 +1,9 @@
 import alfy from "alfy";
 
 const STATUS = {
-  Todo: { name: "Ready", icon: "🟡" },
-  InProgress: { name: "In Progress", icon: "🔵" },
-  Done: { name: "Done", icon: "🟢" },
+  Todo: { name: "Ready", icon: "📋" },
+  InProgress: { name: "In Progress", icon: "⏳" },
+  Done: { name: "Done", icon: "🎉" },
 };
 
 export const getJapanTime = () => {
@@ -60,7 +60,12 @@ const buildTaskFilter = (today) => ({
   or: [
     buildStatusDateFilter(STATUS.Todo.name, today),
     buildStatusDateFilter(STATUS.InProgress.name, today),
-    { property: "Date", date: { equals: today } },
+    {
+      and: [
+        { property: "Date", date: { on_or_after: `${today}T00:00:00+09:00` } },
+        { property: "Date", date: { before: `${today}T23:59:59+09:00` } },
+      ],
+    },
   ],
 });
 
@@ -106,7 +111,7 @@ const buildTaskFilter = (today) => ({
       headers,
       body: JSON.stringify({
         filter: buildTaskFilter(today),
-        sorts: [{ property: "Status", direction: "descending" }],
+        sorts: [{ property: "Status", direction: "ascending" }],
       }),
       maxAge: 60 * 1000, // タスクは1分キャッシュ
       transform: (response) =>
@@ -151,7 +156,7 @@ const buildTaskFilter = (today) => ({
       const projectLabel = projectName ? `[${projectName}] ` : "";
       return {
         title: `${getStatusIcon(task.status)} ${task.title}`,
-        subtitle: `${projectLabel}Date: ${formatDate(task.dateStart, task.dateEnd)} / Estimate: ${formatHours(task.estimate)} / Actual: ${formatHours(task.actual)}`,
+        subtitle: `${projectLabel}${formatDate(task.dateStart, task.dateEnd)} / Estimate: ${formatHours(task.estimate)} / Actual: ${formatHours(task.actual)}`,
         arg: taskData,
         mods: {
           cmd: {
