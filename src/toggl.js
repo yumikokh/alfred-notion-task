@@ -57,12 +57,13 @@ const startTimeEntry = async (workspaceId, description, projectId) => {
 
     const input = process.argv[2] || "";
 
-    // JSONでない入力は無視
+    // JSONでない入力はそのまま出力（新規タスク作成用）
     let parsed;
     try {
       parsed = JSON.parse(input);
     } catch {
-      // JSON形式でない場合は何もしない
+      // JSON形式でない場合は入力をそのまま出力して終了
+      process.stdout.write(input);
       process.exit(0);
     }
 
