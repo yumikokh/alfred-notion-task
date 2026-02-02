@@ -1,5 +1,3 @@
-import { execSync } from "child_process";
-
 const TOGGL_API_BASE = "https://api.track.toggl.com/api/v9";
 
 const getAuthHeader = () => {
@@ -82,23 +80,6 @@ const startTimeEntry = async (workspaceId, description, projectId) => {
     }
 
     await startTimeEntry(workspaceId, title, projectId);
-
-    // Togglアプリをリロード（起動していれば）
-    try {
-      execSync(`osascript -e '
-        tell application "System Events"
-          if exists (process "Toggl Track") then
-            tell application "Toggl Track" to activate
-            delay 0.3
-            tell process "Toggl Track"
-              keystroke "n" using command down
-            end tell
-          end if
-        end tell
-      '`);
-    } catch {
-      // Togglアプリが起動していない場合は無視
-    }
 
     // 通知用にタイトルを直接出力（改行を除去）
     process.stdout.write(title.trim());
