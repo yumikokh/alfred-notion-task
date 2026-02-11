@@ -1,9 +1,9 @@
 import alfy from "alfy";
 
 const STATUS = {
-  Todo: { name: "Ready", icon: "📋" },
-  InProgress: { name: "In Progress", icon: "⏳" },
-  Done: { name: "Done", icon: "🎉" },
+  InProgress: { name: "In Progress", icon: "⏳", order: 0 },
+  Todo: { name: "Ready", icon: "📋", order: 1 },
+  Done: { name: "Done", icon: "🎉", order: 2 },
 };
 
 export const getJapanTime = () => {
@@ -17,10 +17,12 @@ export const getJapanTime = () => {
   return `${year}-${month}-${day}`;
 };
 
-const getStatusIcon = (statusName) => {
-  const status = Object.values(STATUS).find((s) => s.name === statusName);
-  return status?.icon || "-";
-};
+const getStatus = (statusName) =>
+  Object.values(STATUS).find((s) => s.name === statusName);
+
+const getStatusIcon = (statusName) => getStatus(statusName)?.icon || "-";
+
+const getStatusOrder = (statusName) => getStatus(statusName)?.order ?? 99;
 
 const formatTime = (date) => {
   const hours = date.getHours();
@@ -228,8 +230,12 @@ const REFRESHING_TTL = 30 * 1000; // 30秒（リフレッシュフラグの有�
     alfy.cache.delete("swr_refreshing");
   }
 
+  const sortedTasks = [...taskResults].sort(
+    (a, b) => getStatusOrder(a.status) - getStatusOrder(b.status)
+  );
+
   const tasks = [
-    ...taskResults.map((task) => {
+    ...sortedTasks.map((task) => {
       const projectName = task.projectId ? projects[task.projectId] : null;
       const taskData = JSON.stringify({
         title: task.title,
