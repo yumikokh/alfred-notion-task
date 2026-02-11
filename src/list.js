@@ -69,6 +69,54 @@ const buildTaskFilter = (today) => ({
   ],
 });
 
+const fetchTasks = (headers, today) =>
+  alfy.fetch(
+    `https://api.notion.com/v1/databases/${process.env.TASK_DATABASE_ID}/query`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        filter: buildTaskFilter(today),
+        sorts: [{ property: "Status", direction: "ascending" }],
+      }),
+      transform: (response) =>
+        response.results.map((element) => ({
+          title: element.properties["Task"].title[0].text.content,
+          id: element.id,
+          url: element.url,
+          dateStart: element.properties["Date"].date?.start || null,
+          dateEnd: element.properties["Date"].date?.end || null,
+          status: element.properties["Status"].status.name,
+          estimate: element.properties["Estimate Hours"].number || 0,
+          actual: element.properties["Actual Hours"].number || 0,
+          projectId: element.properties["Project"]?.relation?.[0]?.id || null,
+        })),
+    }
+  );
+
+const fetchProjects = (headers) =>
+  alfy.fetch(
+    `https://api.notion.com/v1/databases/${process.env.RELATION_DATABASE_ID}/query`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({}),
+      transform: (response) =>
+        Object.fromEntries(
+          response.results.map((p) => [
+            p.id,
+            p.properties["Project Name"]?.title?.[0]?.text?.content || "",
+          ])
+        ),
+    }
+  );
+
+// SWR キャッシュ設定
+const TASK_REFRESH_INTERVAL = 60 * 1000; // 1分
+const PROJECT_REFRESH_INTERVAL = 10 * 60 * 1000; // 10分
+const CACHE_MAX_AGE = 60 * 60 * 1000; // 1時間（データ保持期間）
+const REFRESHING_TTL = 30 * 1000; // 30秒（リフレッシュフラグの有効期間）
+
 (async () => {
   if (
     !process.env.TASK_DATABASE_ID ||
@@ -105,45 +153,80 @@ const buildTaskFilter = (today) => ({
   };
   const today = getJapanTime();
 
-  const [taskResults, projects] = await Promise.all([
-    alfy.fetch(`https://api.notion.com/v1/databases/${process.env.TASK_DATABASE_ID}/query`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        filter: buildTaskFilter(today),
-        sorts: [{ property: "Status", direction: "ascending" }],
-      }),
-      maxAge: 60 * 1000, // タスクは1分キャッシュ
-      transform: (response) =>
-        response.results.map((element) => ({
-          title: element.properties["Task"].title[0].text.content,
-          id: element.id,
-          url: element.url,
-          dateStart: element.properties["Date"].date?.start || null,
-          dateEnd: element.properties["Date"].date?.end || null,
-          status: element.properties["Status"].status.name,
-          estimate: element.properties["Estimate Hours"].number || 0,
-          actual: element.properties["Actual Hours"].number || 0,
-          projectId: element.properties["Project"]?.relation?.[0]?.id || null,
-        })),
-    }),
-    alfy.fetch(
-      `https://api.notion.com/v1/databases/${process.env.RELATION_DATABASE_ID}/query`,
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({}),
-        maxAge: 60 * 1000 * 10, // プロジェクトは10分キャッシュ
-        transform: (response) =>
-          Object.fromEntries(
-            response.results.map((p) => [
-              p.id,
-              p.properties["Project Name"]?.title?.[0]?.text?.content || "",
-            ])
-          ),
-      }
-    ),
-  ]);
+  // --- SWR キャッシュ読み出し ---
+  const cachedTasks = alfy.cache.get("tasks_data", { ignoreMaxAge: true });
+  const cachedProjects = alfy.cache.get("projects_data", {
+    ignoreMaxAge: true,
+  });
+  const tasksLastFetched = alfy.cache.get("tasks_lastFetched") || 0;
+  const projectsLastFetched = alfy.cache.get("projects_lastFetched") || 0;
+  const isRefreshing = alfy.cache.get("swr_refreshing") === true;
+
+  const now = Date.now();
+  const tasksStale = now - tasksLastFetched > TASK_REFRESH_INTERVAL;
+  const projectsStale = now - projectsLastFetched > PROJECT_REFRESH_INTERVAL;
+  const needsRefresh = tasksStale || projectsStale;
+  const hasCache = cachedTasks !== undefined && cachedProjects !== undefined;
+
+  let taskResults;
+  let projects;
+  let rerunInterval;
+
+  if (!hasCache) {
+    // 初回（キャッシュなし）→ ブロッキングフェッチ
+    [taskResults, projects] = await Promise.all([
+      fetchTasks(headers, today),
+      fetchProjects(headers),
+    ]);
+    alfy.cache.set("tasks_data", taskResults, { maxAge: CACHE_MAX_AGE });
+    alfy.cache.set("projects_data", projects, { maxAge: CACHE_MAX_AGE });
+    alfy.cache.set("tasks_lastFetched", now);
+    alfy.cache.set("projects_lastFetched", now);
+  } else if (!needsRefresh) {
+    // キャッシュ新鮮 → 即返却
+    taskResults = cachedTasks;
+    projects = cachedProjects;
+  } else if (!isRefreshing) {
+    // stale + 初回呼び出し → キャッシュ即返却 + rerunトリガー
+    taskResults = cachedTasks;
+    projects = cachedProjects;
+    alfy.cache.set("swr_refreshing", true, { maxAge: REFRESHING_TTL });
+    rerunInterval = 1;
+  } else {
+    // rerunで再実行 → 必要なものだけフェッチ
+    const fetchPromises = [];
+    if (tasksStale) {
+      fetchPromises.push(
+        fetchTasks(headers, today).then((data) => {
+          alfy.cache.set("tasks_data", data, { maxAge: CACHE_MAX_AGE });
+          alfy.cache.set("tasks_lastFetched", Date.now());
+          return { type: "tasks", data };
+        })
+      );
+    }
+    if (projectsStale) {
+      fetchPromises.push(
+        fetchProjects(headers).then((data) => {
+          alfy.cache.set("projects_data", data, { maxAge: CACHE_MAX_AGE });
+          alfy.cache.set("projects_lastFetched", Date.now());
+          return { type: "projects", data };
+        })
+      );
+    }
+
+    try {
+      const results = await Promise.all(fetchPromises);
+      taskResults =
+        results.find((r) => r.type === "tasks")?.data ?? cachedTasks;
+      projects =
+        results.find((r) => r.type === "projects")?.data ?? cachedProjects;
+    } catch {
+      // フェッチ失敗 → staleキャッシュをフォールバック
+      taskResults = cachedTasks;
+      projects = cachedProjects;
+    }
+    alfy.cache.delete("swr_refreshing");
+  }
 
   const tasks = [
     ...taskResults.map((task) => {
@@ -174,11 +257,14 @@ const buildTaskFilter = (today) => ({
     },
   ];
 
-  alfy.output([
-    ...tasks,
-    {
-      title: "📝 Add new task",
-      subtitle: "Type a task name.",
-    },
-  ]);
+  alfy.output(
+    [
+      ...tasks,
+      {
+        title: "📝 Add new task",
+        subtitle: "Type a task name.",
+      },
+    ],
+    { rerunInterval }
+  );
 })();
